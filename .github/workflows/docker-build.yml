@@ -33,3 +33,7 @@ jobs:
           context: .
           push: true
           tags: ghcr.io/github-campus-club-psgct/kriya-26-backend:latest
+
+      - name: Trigger Jenkins Deploy
+        run: |
+          curl -k -X POST "https://jendc.psgtech.ac.in/generic-webhook-trigger/invoke?token=kriya2026backend"

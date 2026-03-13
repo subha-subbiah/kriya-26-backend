@@ -32,6 +32,16 @@ const round2SubmissionSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    results: [
+        {
+            input: String,
+            expectedOutput: String,
+            actualOutput: String,
+            passed: Boolean,
+            statusDescription: String,
+            isHidden: Boolean
+        }
+    ],
     createdAt: {
         type: Date,
         default: Date.now

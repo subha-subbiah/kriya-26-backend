@@ -10,6 +10,7 @@ import fetch from "node-fetch";
 
 const LANGUAGE_IDS = {
     C: 50,
+    CPP: 54,
     JAVA: 62,
     PYTHON: 71
 };

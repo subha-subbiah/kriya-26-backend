@@ -7,6 +7,7 @@ import { getShipConfig } from "../config/shipConfig.js";
 
 const LANGUAGE_MAP = {
     50: "C",
+    54: "CPP",
     62: "JAVA",
     71: "PYTHON"
 };
@@ -84,6 +85,30 @@ export const createSubmission = async (req, res) => {
         let lifeLost = false;
         let responseData = {};
 
+        let passedCount = executionResult.passed;
+        const totalCount = executionResult.total;
+        let isActuallyCorrect = passedCount === totalCount;
+        let effectApplied = null;
+
+        // --- APPLY ACTION CARD: Davy Jones’ Mercy ---
+        if (!isActuallyCorrect && team.ignoreNextFailedTestcase) {
+            if (passedCount === totalCount - 1) {
+                isActuallyCorrect = true;
+                passedCount = totalCount;
+                effectApplied = "Davy Jones’ Mercy: Ignored 1 failed testcase.";
+                // We'll update executionResult locally for the rest of the flow
+                executionResult.passed = totalCount;
+            }
+            team.ignoreNextFailedTestcase = false; // Always consume on failure
+        }
+
+        // --- APPLY ACTION CARD: Spyglass Focus ---
+        const shouldRevealHidden = team.revealFailedTestcase;
+        if (!isActuallyCorrect && team.revealFailedTestcase) {
+            effectApplied = (effectApplied ? effectApplied + " " : "") + "Spyglass Focus: Revealed failed testcase details.";
+            team.revealFailedTestcase = false;
+        }
+
         if (executionResult.isCompilationError) {
             // --- COMPILATION ERROR ---
             lifeLost = true;
@@ -95,36 +120,61 @@ export const createSubmission = async (req, res) => {
                 compilationError: executionResult.compilationError,
                 livesLeft: problemEntry.livesLeft
             };
-        } else if (executionResult.passed < executionResult.total) {
-            // --- WRONG ANSWER (not all test cases passed) ---
+        } else if (!isActuallyCorrect) {
+            // --- WRONG ANSWER ---
             lifeLost = true;
             problemEntry.livesLeft -= 1;
             problemEntry.wrongSubmissions += 1;
 
             responseData = {
                 verdict: "WRONG_ANSWER",
-                passedTestCases: executionResult.passed,
-                totalTestCases: executionResult.total,
-                livesLeft: problemEntry.livesLeft
+                passedTestCases: passedCount,
+                totalTestCases: totalCount,
+                livesLeft: problemEntry.livesLeft,
+                effectApplied,
+                testResults: executionResult.results.map((res, index) => {
+                    const isHidden = problem.testCases[index].isHidden;
+                    const showDetails = !isHidden || shouldRevealHidden;
+                    return {
+                        input: showDetails ? res.input : "[HIDDEN]",
+                        expectedOutput: showDetails ? res.expectedOutput : "[HIDDEN]",
+                        actualOutput: (showDetails || (!res.passed && isHidden)) ? res.actualOutput : "[HIDDEN]",
+                        passed: res.passed,
+                        status: res.statusDescription,
+                        isHidden: isHidden
+                    };
+                })
             };
         } else {
-            // --- ALL TEST CASES PASS ---
+            // --- ALL TEST CASES PASS (OR MERCY APPLIED) ---
             problemEntry.status = "SOLVED";
 
-            // Calculate score: base score = 100 (can be adjusted)
+            // Calculate score
             const baseScore = 100;
             const finalScore = calculateScore(baseScore, team.shipConfig);
 
-            // Update team round2 score
             team.round2.score = (team.round2.score || 0) + finalScore;
             team.totalScore = (team.totalScore || 0) + finalScore;
 
             responseData = {
                 verdict: "ACCEPTED",
-                passedTestCases: executionResult.passed,
-                totalTestCases: executionResult.total,
+                passedTestCases: passedCount,
+                totalTestCases: totalCount,
                 score: finalScore,
-                livesLeft: problemEntry.livesLeft
+                livesLeft: problemEntry.livesLeft,
+                effectApplied,
+                testResults: executionResult.results.map((res, index) => {
+                    const isHidden = problem.testCases[index].isHidden;
+                    const showDetails = !isHidden || shouldRevealHidden;
+                    return {
+                        input: showDetails ? res.input : "[HIDDEN]",
+                        expectedOutput: showDetails ? res.expectedOutput : "[HIDDEN]",
+                        actualOutput: showDetails ? res.actualOutput : "[HIDDEN]",
+                        passed: res.passed,
+                        status: res.statusDescription,
+                        isHidden: isHidden
+                    };
+                })
             };
         }
 
@@ -147,7 +197,15 @@ export const createSubmission = async (req, res) => {
             code,
             passedTestCases: executionResult.passed || 0,
             totalTestCases: executionResult.total || 0,
-            lifeLost
+            lifeLost,
+            results: executionResult.results ? executionResult.results.map((res, index) => ({
+                input: res.input,
+                expectedOutput: res.expectedOutput,
+                actualOutput: res.actualOutput,
+                passed: res.passed,
+                statusDescription: res.statusDescription,
+                isHidden: problem.testCases[index].isHidden
+            })) : []
         });
         await submission.save();
 

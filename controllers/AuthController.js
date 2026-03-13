@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import Team from "../models/Team.js";
+import jwt from "jsonwebtoken";
 
 // CREATE TEAM / SIGNUP
 export const signupTeam = async (req, res) => {
@@ -102,15 +103,18 @@ export const loginTeam = async (req, res) => {
 
     }
 
+    const token = jwt.sign(
+      { id: team._id, kriyaID: team.kriyaID, role: "team" },
+      process.env.JWT_SECRET,
+      { expiresIn: "6h" }
+    );
+
     res.status(200).json({
       success: true,
       message: "Login successful",
-      token: jwt.sign(
-        { id: team._id, role: "team" },
-        process.env.JWT_SECRET,
-        { expiresIn: "12h" }
-      ),
+      token,
       team: {
+        id: team._id,
         teamName: team.teamName,
         kriyaID: team.kriyaID,
         shipConfig: team.shipConfig,

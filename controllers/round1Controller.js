@@ -158,6 +158,8 @@ export const submitRound1Answer = async (req, res) => {
     team.round1.score += points;
     team.totalScore += points;
 
+    let actionCard = null;
+
     if (card) {
       const randomQuestionNo = Math.floor(Math.random() * 5);
 
@@ -174,6 +176,7 @@ export const submitRound1Answer = async (req, res) => {
       correct: true,
       earnedPoints: points,
       card: card,
+      actionCard: actionCard, // Return the awarded action card
       msg: "Correct answer!",
     });
   } catch (err) {
