@@ -3,14 +3,47 @@ import Team from "../models/Team.js";
 export const ACTION_CARDS = {
     "Black Pearl’s Resurgence": {
         description: "Gain 2 extra lives on all assigned problems.",
-        effect: (team) => {
-            if (team.round2 && Array.isArray(team.round2.problemsStatus)) {
+        effect: async (team) => {
+            // Lazy-initialization if problemsStatus is empty but scrolls exist
+            if ((!team.round2.problemsStatus || team.round2.problemsStatus.length === 0) && team.round1.selectedScrolls?.length > 0) {
+                console.log(`Auto-initializing problemsStatus for team: ${team.teamName}`);
+                const Round2Question = (await import("../models/round2questions.js")).default;
+                const AlgorithmCard = (await import("../models/AlgorithmCard.js")).default;
+                const { getShipConfig } = await import("../config/shipConfig.js");
+                
+                const shipConfig = getShipConfig(team.shipConfig);
+                const initialLives = shipConfig ? shipConfig.round2Lives : 3;
+
+                const problemsStatus = [];
+                for (const scroll of team.round1.selectedScrolls) {
+                    const algo = await AlgorithmCard.findOne({ name: scroll.name });
+                    if (!algo) continue;
+                    const problem = await Round2Question.findOne({ allowedAlgorithms: algo._id });
+                    if (problem) {
+                        problemsStatus.push({
+                            problemId: problem._id,
+                            livesLeft: initialLives,
+                            bonusLives: 2, 
+                            wrongSubmissions: 0,
+                            status: "NOT_STARTED"
+                        });
+                    }
+                }
+                if (problemsStatus.length > 0) {
+                    team.round2.problemsStatus = problemsStatus;
+                    team.markModified('round2.problemsStatus');
+                    return "Gain 2 extra lives. Added to all problems (Initialization Success).";
+                }
+            }
+
+            if (team.round2 && Array.isArray(team.round2.problemsStatus) && team.round2.problemsStatus.length > 0) {
                 team.round2.problemsStatus.forEach(problem => {
-                    problem.livesLeft += 2;
+                    problem.bonusLives = (problem.bonusLives || 0) + 2;
                 });
+                team.markModified('round2.problemsStatus');
                 return "Gain 2 extra lives. Added to all problems.";
             }
-            throw new Error("Round 2 problems not initialized");
+            throw new Error("Round 2 has not started yet. Plot your course on the map first!");
         }
     },
     "Captain’s Hidden Map": {
@@ -43,7 +76,10 @@ export const awardRandomCard = async (team) => {
     }
 
     const allCardNames = Object.keys(ACTION_CARDS);
-    const availableCards = allCardNames.filter(card => !team.claimedActionCards.includes(card));
+    const availableCards = allCardNames.filter(card => 
+        !team.claimedActionCards.includes(card) && 
+        !(team.usedActionCards || []).includes(card)
+    );
 
     if (availableCards.length === 0) return null;
 
@@ -122,7 +158,7 @@ export const activateActionCard = async (req, res) => {
         if (!cardDef) return res.status(400).json({ msg: "Unknown action card" });
 
         try {
-            const effectMessage = cardDef.effect(team);
+            const effectMessage = await cardDef.effect(team);
             
             // Move from claimed to used
             team.claimedActionCards.splice(cardIndex, 1);

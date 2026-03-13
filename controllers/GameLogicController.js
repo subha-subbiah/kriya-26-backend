@@ -53,40 +53,50 @@ export const submitSolution = async (req, res) => {
                 responseData.verdict = "ACCEPTED";
                 responseData.effectApplied = "Davy Jones’ Mercy: Ignored 1 failed testcase.";
                 team.ignoreNextFailedTestcase = false;
-            } else {
-                team.ignoreNextFailedTestcase = false;
             }
-            await team.save();
+            // Else: Leave card for next attempt
         }
 
         // Apply Spyglass Focus (Reveal failed testcase index)
         if (!isCorrect && team.revealFailedTestcase) {
             const failedIndex = executionResult.results?.findIndex(r => !r.success);
             responseData.failedTestcaseIndex = failedIndex !== -1 ? failedIndex : null;
-            responseData.effectApplied = (responseData.effectApplied ? responseData.effectApplied + " " : "") + "Spyglass Focus: Revealed failed testcase index.";
+            responseData.effectApplied = (responseData.effectApplied ? responseData.effectApplied + " " : "") + "Spyglass Focus: Revealed failed testcase details.";
             team.revealFailedTestcase = false;
-            await team.save();
         }
+        await team.save();
 
         if (isCorrect) {
             const baseScore = 100;
             let finalScore = calculateScore(baseScore, team.shipConfig);
             team.round2.score = (team.round2.score || 0) + finalScore;
             team.totalScore = (team.totalScore || 0) + finalScore;
+            
+            const problemEntry = team.round2.problemsStatus.find(p => p.problemId.toString() === problemId.toString());
+            if (problemEntry) {
+                responseData.livesLeft = problemEntry.livesLeft + (problemEntry.bonusLives || 0);
+            }
+            team.markModified('round2.problemsStatus');
             await team.save();
             await syncLeaderboard(team._id);
             responseData.score = finalScore;
         } else {
             const problemEntry = team.round2.problemsStatus.find(p => p.problemId.toString() === problemId.toString());
             if (problemEntry) {
-                problemEntry.livesLeft -= 1;
-                if (problemEntry.livesLeft <= 0) {
+                if (problemEntry.livesLeft > 0) {
+                    problemEntry.livesLeft -= 1;
+                } else {
+                    problemEntry.bonusLives = Math.max(0, (problemEntry.bonusLives || 0) - 1);
+                }
+
+                if (problemEntry.livesLeft <= 0 && (problemEntry.bonusLives || 0) <= 0) {
                     problemEntry.status = "SUNK";
                     const shipConfig = getShipConfig(team.shipConfig);
                     problemEntry.livesLeft = shipConfig ? shipConfig.round2Lives : 3;
                 }
+                team.markModified('round2.problemsStatus');
                 await team.save();
-                responseData.livesLeft = problemEntry.livesLeft;
+                responseData.livesLeft = problemEntry.livesLeft + (problemEntry.bonusLives || 0);
             }
         }
 

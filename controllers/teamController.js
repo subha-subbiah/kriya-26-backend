@@ -169,35 +169,42 @@ export const round2Answers = async (req, res) => {
       return res.status(400).json({ msg: "No scrolls selected in Round 1" });
     }
 
-    // Enforce exactly 3 distinct scrolls
-    const uniqueScrolls = [...new Set(selectedScrolls.map(String))];
-    if (uniqueScrolls.length !== 3) {
-      return res.status(400).json({ msg: "Exactly 3 distinct scrolls are required" });
-    }
-
-    // Get ship lives
-    const shipConfig = getShipConfig(team.shipConfig);
-    const lives = shipConfig ? shipConfig.round2Lives : 3;
-
     // Map each scroll to a Round 2 problem
     const problemsStatus = [];
-    for (const scrollId of uniqueScrolls) {
-      const problem = await Round2Question.findOne({
-        allowedAlgorithms: scrollId
-      });
+    const AlgorithmCard = (await import("../models/AlgorithmCard.js")).default;
+    
+    const shipConfig = getShipConfig(team.shipConfig);
+    const initialLives = shipConfig ? shipConfig.round2Lives : 3;
 
-      if (!problem) {
-        return res.status(400).json({
-          msg: `No Round 2 problem found for scroll (algorithm card) ${scrollId}`
-        });
+    for (const scroll of selectedScrolls) {
+      // Find the algorithm card by name to get its ID
+      const algo = await AlgorithmCard.findOne({ name: scroll.name });
+      if (!algo) {
+        console.error(`Algorithm card not found for name: ${scroll.name}`);
+        continue;
       }
 
-      problemsStatus.push({
-        problemId: problem._id,
-        livesLeft: lives,
-        wrongSubmissions: 0,
-        status: "NOT_STARTED"
+      const problem = await Round2Question.findOne({
+        allowedAlgorithms: algo._id
       });
+
+      if (problem) {
+        problemsStatus.push({
+          problemId: problem._id,
+          livesLeft: initialLives,
+          bonusLives: 0, // Track extra lives from action cards separately
+          wrongSubmissions: 0,
+          status: "NOT_STARTED"
+        });
+      } else {
+        console.warn(`No Round 2 problem found for algorithm: ${scroll.name} (${algo._id})`);
+      }
+    }
+
+    if (problemsStatus.length === 0) {
+        return res.status(400).json({ 
+            msg: "Could not find any problems for your selected scrolls. Please contact an admin." 
+        });
     }
 
     team.round2.problemsStatus = problemsStatus;

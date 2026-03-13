@@ -168,6 +168,7 @@ export const submitRound1Answer = async (req, res) => {
         difficultyTag: card.difficultyTag,
         questionNo: randomQuestionNo,
       });
+      team.markModified('round1.selectedScrolls');
     }
 
     await team.save();

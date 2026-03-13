@@ -92,39 +92,54 @@ export const createSubmission = async (req, res) => {
                 effectApplied = "Davy Jones’ Mercy: Ignored 1 failed testcase.";
                 // We'll update executionResult locally for the rest of the flow
                 executionResult.passed = totalCount;
+                team.ignoreNextFailedTestcase = false; // Consume only if applied successfully
             }
-            team.ignoreNextFailedTestcase = false; // Always consume on failure
+            // Note: If they failed more than 1 test case, the card is NOT consumed and remains for the next attempt.
         }
 
         // --- APPLY ACTION CARD: Spyglass Focus ---
-        const shouldRevealHidden = team.revealFailedTestcase;
-        if (!isActuallyCorrect && team.revealFailedTestcase) {
-            effectApplied = (effectApplied ? effectApplied + " " : "") + "Spyglass Focus: Revealed failed testcase details.";
-            team.revealFailedTestcase = false;
+        let shouldRevealHidden = false;
+        if (team.revealFailedTestcase) {
+            if (!isActuallyCorrect) {
+                shouldRevealHidden = true;
+                effectApplied = (effectApplied ? effectApplied + " " : "") + "Spyglass Focus: Revealed failed testcase details.";
+                team.revealFailedTestcase = false; // Only consume if we actually failed
+            } else {
+                // If it was actually correct, we don't reveal hidden cases and don't consume the card
+                shouldRevealHidden = false;
+            }
         }
 
         if (executionResult.isCompilationError) {
             // --- COMPILATION ERROR ---
             lifeLost = true;
-            problemEntry.livesLeft -= 1;
+            if (problemEntry.livesLeft > 0) {
+                problemEntry.livesLeft -= 1;
+            } else {
+                problemEntry.bonusLives = Math.max(0, (problemEntry.bonusLives || 0) - 1);
+            }
             problemEntry.wrongSubmissions += 1;
 
             responseData = {
                 verdict: "COMPILATION_ERROR",
                 compilationError: executionResult.compilationError,
-                livesLeft: problemEntry.livesLeft
+                livesLeft: problemEntry.livesLeft + (problemEntry.bonusLives || 0)
             };
         } else if (!isActuallyCorrect) {
             // --- WRONG ANSWER ---
             lifeLost = true;
-            problemEntry.livesLeft -= 1;
+            if (problemEntry.livesLeft > 0) {
+                problemEntry.livesLeft -= 1;
+            } else {
+                problemEntry.bonusLives = Math.max(0, (problemEntry.bonusLives || 0) - 1);
+            }
             problemEntry.wrongSubmissions += 1;
 
             responseData = {
                 verdict: "WRONG_ANSWER",
                 passedTestCases: passedCount,
                 totalTestCases: totalCount,
-                livesLeft: problemEntry.livesLeft,
+                livesLeft: problemEntry.livesLeft + (problemEntry.bonusLives || 0),
                 effectApplied,
                 testResults: executionResult.results.map((res, index) => {
                     const isHidden = problem.testCases[index].isHidden;
@@ -132,10 +147,11 @@ export const createSubmission = async (req, res) => {
                     return {
                         input: showDetails ? res.input : "[HIDDEN]",
                         expectedOutput: showDetails ? res.expectedOutput : "[HIDDEN]",
-                        actualOutput: (showDetails || (!res.passed && isHidden)) ? res.actualOutput : "[HIDDEN]",
+                        actualOutput: showDetails ? res.actualOutput : "[HIDDEN]",
                         passed: res.passed,
                         status: res.statusDescription,
-                        isHidden: isHidden
+                        isHidden: isHidden,
+                        stderr: showDetails ? res.stderr : null
                     };
                 })
             };
@@ -155,7 +171,7 @@ export const createSubmission = async (req, res) => {
                 passedTestCases: passedCount,
                 totalTestCases: totalCount,
                 score: finalScore,
-                livesLeft: problemEntry.livesLeft,
+                livesLeft: problemEntry.livesLeft + (problemEntry.bonusLives || 0),
                 effectApplied,
                 testResults: executionResult.results.map((res, index) => {
                     const isHidden = problem.testCases[index].isHidden;
@@ -166,22 +182,25 @@ export const createSubmission = async (req, res) => {
                         actualOutput: showDetails ? res.actualOutput : "[HIDDEN]",
                         passed: res.passed,
                         status: res.statusDescription,
-                        isHidden: isHidden
+                        isHidden: isHidden,
+                        stderr: showDetails ? res.stderr : null
                     };
                 })
             };
         }
 
-        // Check if sunk (lives exhausted before solving)
-        if (problemEntry.livesLeft <= 0 && problemEntry.status !== "SOLVED") {
+        // Check if sunk (all lives exhausted before solving)
+        if (problemEntry.livesLeft <= 0 && (problemEntry.bonusLives || 0) <= 0 && problemEntry.status !== "SOLVED") {
             problemEntry.status = "SUNK";
-            // Reset lives to ship's initial count for retry
+            // Reset lives to ship's initial count for retry, but KEEP bonusLives!
             problemEntry.livesLeft = initialLives;
 
             responseData.sunk = true;
             responseData.msg = "Ship has sunk! Lives reset — you can retry.";
-            responseData.livesLeft = problemEntry.livesLeft;
+            responseData.livesLeft = problemEntry.livesLeft + (problemEntry.bonusLives || 0);
         }
+
+        team.markModified('round2.problemsStatus');
 
         // Save submission record
         const submission = new Round2Submission({

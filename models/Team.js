@@ -51,6 +51,7 @@ const teamSchema = new mongoose.Schema({
       {
         problemId: { type: mongoose.Schema.Types.ObjectId, ref: "Round2Question" },
         livesLeft: { type: Number, default: 3 },
+        bonusLives: { type: Number, default: 0 },
         wrongSubmissions: { type: Number, default: 0 },
         startTime: { type: Date, default: null },
         status: {
