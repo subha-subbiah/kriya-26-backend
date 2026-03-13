@@ -140,6 +140,9 @@ export const submitSolution = async (req, res) => {
     }
 };
 
+import ActionCard from "../models/actionCard.model.js";
+import ActionCardInventory from "../models/ActionCardInventory.js";
+
 /**
  * POST /players/:playerId/minigame-complete
  * Apply mini-game reward logic.
@@ -174,10 +177,37 @@ export const minigameComplete = async (req, res) => {
         await team.save();
         await syncLeaderboard(team._id);
 
+        // --- Action Card Award Logic ---
+        // 1. Get all possible action cards (a1-a8)
+        const allCards = await ActionCard.find().sort({ cardNumber: 1 });
+        
+        // 2. Get team's existing inventory to check for duplicates
+        const teamInventory = await ActionCardInventory.find({ teamId: team._id });
+        const ownedCardIds = teamInventory.map(item => item.cardId.toString());
+
+        // 3. Find cards they don't have yet
+        const unownedCards = allCards.filter(c => !ownedCardIds.includes(c._id.toString()));
+
+        let awardedCard = null;
+        if (unownedCards.length > 0) {
+            // 4. Pick one at random
+            const randomIndex = Math.floor(Math.random() * unownedCards.length);
+            awardedCard = unownedCards[randomIndex];
+
+            // 5. Add to inventory
+            const newInventoryItem = new ActionCardInventory({
+                teamId: team._id,
+                cardId: awardedCard._id,
+                isUsed: false
+            });
+            await newInventoryItem.save();
+        }
+
         res.json({
-            msg: "Mini-game reward applied",
+            msg: awardedCard ? "Mini-game reward applied! Action card awarded." : "Mini-game reward applied! (All cards already collected)",
             reward,
-            effectApplied
+            effectApplied,
+            card: awardedCard
         });
 
     } catch (err) {

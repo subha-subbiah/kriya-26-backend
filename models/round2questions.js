@@ -3,7 +3,7 @@ import { Schema, model } from "mongoose";
 const round2QuestionSchema = new Schema({
   title: String,
   description: String,
-  allowedAlgorithms: [{ type: Schema.Types.ObjectId, ref: "AlgorithmCard" }],
+  allowedAlgorithms: [{ type: Schema.Types.ObjectId, ref: "Algorithm" }],
   timeLimitSec: Number,
   code:String,
   testCases: [

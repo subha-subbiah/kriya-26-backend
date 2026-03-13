@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authMiddleware, teamAuthMiddleware } from "../middleware/authMiddleware.js";
 import {
     createSubmission,
+    openProblem,
     getByTeam,
     getByProblem,
     updateSubmission,
@@ -10,6 +11,7 @@ import {
 
 const router = Router();
 
+router.post("/open", teamAuthMiddleware, openProblem);
 router.post("/", teamAuthMiddleware, createSubmission);
 router.get("/team/:id", authMiddleware, getByTeam);
 router.get("/problem/:id", authMiddleware, getByProblem);

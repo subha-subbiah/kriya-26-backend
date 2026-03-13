@@ -19,11 +19,11 @@ const algorithmSchema = new mongoose.Schema({
   Array: [
     {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Round1Question"
+      ref: "Round2Question"
     }
   ]
 });
 
-const Algorithm = mongoose.model("Algorithm", algorithmSchema);
+const Algorithm = mongoose.model("AlgorithmCard", algorithmSchema, "algorithmcards");
 
 export default Algorithm;
