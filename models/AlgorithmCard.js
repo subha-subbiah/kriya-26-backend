@@ -11,7 +11,7 @@ import mongoose from "mongoose";
 
 // export default model("AlgorithmCard", algorithmCardSchema);
 
-const algorithmSchema = new mongoose.Schema({
+const algorithmCardSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true
@@ -21,9 +21,16 @@ const algorithmSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: "Round2Question"
     }
-  ]
-});
+  ],
+  description: {
+    type: String
+  },
+  difficultyTag: {
+    type: String
+  },
+  iconUrl: {
+    type: String
+  }
+}, { timestamps: true });
 
-const Algorithm = mongoose.model("Algorithm", algorithmSchema);
-
-export default Algorithm;
+export default mongoose.model("AlgorithmCard", algorithmCardSchema);

@@ -1,6 +1,9 @@
 import Team from "../models/Team.js";
 import Round2Question from "../models/round2questions.js";
 import Round2Submission from "../models/round2submission.js";
+import ActiveEffect from "../models/ActiveEffect.js";
+import ActionCard from "../models/actionCard.model.js";
+import ActionCardInventory from "../models/ActionCardInventory.js";
 import { runTestCases } from "../services/codeExecutionService.js";
 import { calculateScore, syncLeaderboard } from "../services/scoringService.js";
 import { getShipConfig } from "../config/shipConfig.js";
@@ -133,11 +136,33 @@ export const minigameComplete = async (req, res) => {
 
         team.round2.score = (team.round2.score || 0) + reward;
         team.totalScore = (team.totalScore || 0) + reward;
+
+        let actionCard = null;
+        try {
+            const totalActionCards = await ActionCard.countDocuments();
+            if (totalActionCards > 0) {
+                const randomIndex = Math.floor(Math.random() * totalActionCards);
+                actionCard = await ActionCard.findOne().skip(randomIndex);
+
+                if (actionCard) {
+                    await ActionCardInventory.create({
+                        teamId: team._id,
+                        cardId: actionCard._id,
+                    });
+                }
+            }
+        } catch (awardErr) {
+            console.error("Error awarding action card in minigame:", awardErr);
+        }
+
         await team.save();
         await syncLeaderboard(team._id);
 
         res.json({
             msg: "Mini-game reward applied",
+            reward,
+            effectApplied,
+            card: actionCard // Return the awarded action card
             reward
         });
 

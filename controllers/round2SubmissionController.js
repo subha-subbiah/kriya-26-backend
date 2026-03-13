@@ -7,6 +7,7 @@ import { getShipConfig } from "../config/shipConfig.js";
 
 const LANGUAGE_MAP = {
     50: "C",
+    54: "CPP",
     62: "JAVA",
     71: "PYTHON"
 };
