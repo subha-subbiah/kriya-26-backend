@@ -5,8 +5,6 @@ import { selectShip } from "../controllers/teamController.js";
 import {
     round1Answers,
     round2Answers,
-    selectActionCards,
-    useActionCard,
     deleteRound1Answer,
     deleteRound2Answer,
     updateAnswer,
@@ -34,9 +32,6 @@ router.post("/logout", teamAuthMiddleware, logout);
 router.post("/round1answers", teamAuthMiddleware, round1Answers);
 router.post("/round2answers", teamAuthMiddleware, round2Answers);
 
-// Action cards
-router.post("/select-action-cards", teamAuthMiddleware, selectActionCards);
-router.post("/use-action-card", teamAuthMiddleware, useActionCard);
 
 // Delete / Update answers
 router.delete("/round1answers/:id", teamAuthMiddleware, deleteRound1Answer);

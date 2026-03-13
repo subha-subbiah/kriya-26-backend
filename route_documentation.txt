@@ -4,71 +4,71 @@ Base URL: `http://localhost:3000/kriyabe` (assuming standard mount point)
 
 All routes below require Bearer Token Authentication (Team Role).
 
-## Action Card Management
+The `:kriyaID` in the routes refers to the team's unique Kriya ID.
 
-### 1. View All Available Action Cards
-**GET** `/api/actionCards`
-- **Description**: Returns all card definitions in the game.
-- **Example Response**:
-```json
-[
-  {
-    "_id": "card_id_1",
-    "cardNumber": 1,
-    "name": "Black Pearl’s Resurgence",
-    "description": "Gain 2 extra lives."
-  },
-  ...
-]
-```
+---
 
-### 2. View Owned Action Cards
-**GET** `/api/players/:kriyaID/cards`
-- **Description**: Returns cards currently owned by the team and not yet used.
-- **Headers**: `Authorization: Bearer <token>`
+## Action Card Routes
 
-### 3. Activate an Action Card
-**POST** `/api/players/:kriyaID/cards/:cardId/use`
-- **Description**: Activates a card from the team's inventory and applies its effect (immediate or temporary).
-- **Headers**: `Authorization: Bearer <token>`
+### 1. Claim Action Card
+**POST** `/api/actionCards/claim/:kriyaID`
+- **Description**: Randomly selects one card from the available 4 and adds it to the team's `claimedActionCards`.
 - **Example Response**:
 ```json
 {
-  "msg": "Card activated successfully",
-  "effect": "One failed testcase will be ignored for the next submission.",
-  "card": "Davy Jones’ Mercy"
+  "success": true,
+  "claimedCard": "Spyglass Focus"
+}
+```
+
+### 2. Get Claimed Action Cards
+**GET** `/api/actionCards/claimed/:kriyaID`
+- **Description**: Returns all cards currently in the team's claimed inventory.
+- **Example Response**:
+```json
+{
+  "claimedActionCards": [
+    "Black Pearl’s Resurgence",
+    "Spyglass Focus"
+  ]
+}
+```
+
+### 3. Activate Action Card
+**POST** `/api/actionCards/activate/:kriyaID`
+- **Description**: Activates a card, applies its effect, and moves it to `usedActionCards`.
+- **Body**:
+```json
+{
+  "cardName": "Black Pearl’s Resurgence"
+}
+```
+- **Example Response**:
+```json
+{
+  "success": true,
+  "message": "Gain 2 extra lives. Added to all problems.",
+  "cardName": "Black Pearl’s Resurgence"
+}
+```
+
+### 4. Get Used Action Cards
+**GET** `/api/actionCards/used/:kriyaID`
+- **Description**: Returns a list of all cards used by the team.
+- **Example Response**:
+```json
+{
+  "usedActionCards": [
+    "Captain’s Hidden Map"
+  ]
 }
 ```
 
 ---
 
-## Game Actions (with Cards)
+## Game Action Logic (Integrated Cards)
 
-### 4. Submit Question Solution
-**POST** `/api/players/:kriyaID/submit`
-- **Description**: Submits a coding solution. Applies active effects:
-  - **Davy Jones’ Mercy**: Ignores 1 failed testcase if exactly 1 fails.
-  - **Isla de Muerta Treasure**: Adds +10 bonus points on success.
-  - **Spyglass Focus**: Returns failed testcase index on failure.
-  - **Anchor Drop**: Acknowledges difficulty lock on success.
-- **Body**:
-```json
-{
-  "problemId": "...",
-  "language": "PYTHON",
-  "code": "..."
-}
-```
-- **Headers**: `Authorization: Bearer <token>`
-
-### 5. Mini-game Completion
-**POST** `/api/players/:kriyaID/minigame-complete`
-- **Description**: Applies mini-game rewards. Applies active effects:
-  - **Chest of Cortés**: Doubles base reward and adds +5 bonus points.
-- **Body**:
-```json
-{
-  "baseReward": 5
-}
-```
-- **Headers**: `Authorization: Bearer <token>`
+### Submission Solution
+**POST** `/api/round2/submissions/submit/:kriyaID` (Verify mount in GameLogicRoutes)
+- **Effect of Davy Jones’ Mercy**: If `ignoreNextFailedTestcase` is true and exactly 1 testcase fails, the submission is treated as `ACCEPTED`. Flag is consumed.
+- **Effect of Spyglass Focus**: If `revealFailedTestcase` is true and the submission fails, the response includes `failedTestcaseIndex`. Flag is consumed.

@@ -27,8 +27,6 @@ export const submitSolution = async (req, res) => {
         const problem = await Round2Question.findById(problemId);
         if (!problem) return res.status(404).json({ msg: "Invalid question" });
 
-        const activeEffect = await ActiveEffect.findOne({ teamId: team._id });
-
         // Execute code
         const testCases = problem.testCases || [];
         const executionResult = await runTestCases(
@@ -47,8 +45,8 @@ export const submitSolution = async (req, res) => {
             verdict: isCorrect ? "ACCEPTED" : "WRONG_ANSWER"
         };
 
-        // Card 2: Davy Jones’ Mercy (Ignore 1 failed testcase)
-        if (!isCorrect && activeEffect?.ignoreTestcase) {
+        // Card: Davy Jones’ Mercy (Ignore 1 failed testcase)
+        if (!isCorrect && team.ignoreNextFailedTestcase) {
             if (passed === total - 1) {
                 isCorrect = true;
                 passed = total;
@@ -56,23 +54,24 @@ export const submitSolution = async (req, res) => {
                 responseData.effectApplied = "Davy Jones’ Mercy: Ignored 1 failed testcase.";
 
                 // Consume effect
-                activeEffect.ignoreTestcase = false;
-                await activeEffect.save();
+                team.ignoreNextFailedTestcase = false;
+                await team.save();
+            } else {
+                // If more than 1 testcase failed, effect is still consumed but submission remains incorrect
+                team.ignoreNextFailedTestcase = false;
+                await team.save();
             }
         }
 
-        // Card 8: Spyglass Focus (Reveal failed testcase index)
-        if (!isCorrect && activeEffect?.revealFailedTestcase) {
-            // Find the index of the first failed test case
-            // Note: runTestCases should ideally return which ones failed. 
-            // Assuming executionResult.results is an array of testcase results.
+        // Card: Spyglass Focus (Reveal failed testcase index)
+        if (!isCorrect && team.revealFailedTestcase) {
             const failedIndex = executionResult.results?.findIndex(r => !r.success);
             responseData.failedTestcaseIndex = failedIndex !== -1 ? failedIndex : null;
-            responseData.effectApplied = "Spyglass Focus: Revealed failed testcase index.";
+            responseData.effectApplied = (responseData.effectApplied ? responseData.effectApplied + " " : "") + "Spyglass Focus: Revealed failed testcase index.";
 
             // Consume effect
-            activeEffect.revealFailedTestcase = false;
-            await activeEffect.save();
+            team.revealFailedTestcase = false;
+            await team.save();
         }
 
         if (isCorrect) {
@@ -80,29 +79,8 @@ export const submitSolution = async (req, res) => {
             const baseScore = 100;
             let finalScore = calculateScore(baseScore, team.shipConfig);
 
-            // Card 3: Isla de Muerta Treasure (+10 bonus points)
-            if (activeEffect?.bonusPointsNextSuccess) {
-                finalScore += 10;
-                responseData.effectApplied = (responseData.effectApplied ? responseData.effectApplied + " " : "") + "Isla de Muerta Treasure: +10 bonus points added.";
-
-                // Consume effect
-                activeEffect.bonusPointsNextSuccess = false;
-                await activeEffect.save();
-            }
-
             team.round2.score = (team.round2.score || 0) + finalScore;
             team.totalScore = (team.totalScore || 0) + finalScore;
-
-            // Card 7: Anchor Drop (Lock difficulty progression)
-            if (activeEffect?.freezeDifficulty) {
-                responseData.effectApplied = (responseData.effectApplied ? responseData.effectApplied + " " : "") + "Anchor Drop: Difficulty progression locked.";
-                // Logic: Usually would update island or next question difficulty. 
-                // Since we don't have the progression logic here, we just acknowledgement it.
-
-                // Consume effect
-                activeEffect.freezeDifficulty = false;
-                await activeEffect.save();
-            }
 
             await team.save();
             await syncLeaderboard(team._id);
@@ -144,7 +122,7 @@ export const submitSolution = async (req, res) => {
 
 /**
  * POST /players/:playerId/minigame-complete
- * Apply mini-game reward logic.
+ * Apply mini-game reward logic. (Simplified as per requirements)
  */
 export const minigameComplete = async (req, res) => {
     try {
@@ -154,22 +132,7 @@ export const minigameComplete = async (req, res) => {
         const team = await Team.findOne({ kriyaID });
         if (!team) return res.status(404).json({ msg: "Invalid player" });
 
-        const activeEffect = await ActiveEffect.findOne({ teamId: team._id });
-
         let reward = baseReward || 5;
-        let effectApplied = "";
-
-        // Card 5: Chest of Cortés (Double reward + bonus points)
-        if (activeEffect?.doubleMiniGameReward) {
-            reward *= 2;
-            reward += activeEffect.bonusPointsMiniGame || 0;
-            effectApplied = "Chest of Cortés: Reward doubled and +5 bonus points added.";
-
-            // Consume effect
-            activeEffect.doubleMiniGameReward = false;
-            activeEffect.bonusPointsMiniGame = 0;
-            await activeEffect.save();
-        }
 
         team.round2.score = (team.round2.score || 0) + reward;
         team.totalScore = (team.totalScore || 0) + reward;
@@ -200,6 +163,7 @@ export const minigameComplete = async (req, res) => {
             reward,
             effectApplied,
             card: actionCard // Return the awarded action card
+            reward
         });
 
     } catch (err) {
