@@ -5,33 +5,42 @@
  * Supports C (50), Java (62), Python (71).
  */
 
+import https from "https";
+import fetch from "node-fetch";
+
 const LANGUAGE_IDS = {
     C: 50,
     JAVA: 62,
     PYTHON: 71
 };
 
-const JUDGE0_URL = process.env.JUDGE0_API_URL || "http://10.1.22.141:2358";
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 /**
  * Execute code against a single test case via Judge0.
- * @param {string} language - "C" | "JAVA" | "PYTHON"
+ * @param {number|string} language - language_id (50/62/71) OR name "C"/"JAVA"/"PYTHON"
  * @param {string} sourceCode - The source code to execute
  * @param {string} stdin - The input to feed to the program
  * @param {number} timeLimitSec - Time limit in seconds
  * @returns {Promise<{stdout, stderr, compile_output, status, time, memory}>}
  */
 export async function executeCode(language, sourceCode, stdin, timeLimitSec = 10) {
-    const languageId = LANGUAGE_IDS[language.toUpperCase()];
+    const JUDGE0_URL = process.env.JUDGE0_API_URL || "http://10.1.22.141:2358";
+
+    // Accept either language_id number or language name string
+    const languageId = typeof language === "number"
+        ? language
+        : LANGUAGE_IDS[language.toUpperCase()];
+
     if (!languageId) {
-        throw new Error(`Unsupported language: ${language}. Supported: C, JAVA, PYTHON`);
+        throw new Error(`Unsupported language: ${language}. Supported: 50 (C), 62 (JAVA), 71 (PYTHON)`);
     }
 
     const payload = {
         language_id: languageId,
         source_code: sourceCode,
         stdin: stdin || "",
-        cpu_time_limit: timeLimitSec
+        cpu_time_limit: Math.min(timeLimitSec, 15)
     };
 
     const response = await fetch(
@@ -39,7 +48,8 @@ export async function executeCode(language, sourceCode, stdin, timeLimitSec = 10
         {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            agent: httpsAgent
         }
     );
 
@@ -54,7 +64,7 @@ export async function executeCode(language, sourceCode, stdin, timeLimitSec = 10
         stdout: result.stdout || "",
         stderr: result.stderr || "",
         compile_output: result.compile_output || "",
-        status: result.status, // { id, description }
+        status: result.status,
         time: result.time,
         memory: result.memory
     };
@@ -63,7 +73,7 @@ export async function executeCode(language, sourceCode, stdin, timeLimitSec = 10
 /**
  * Run code against multiple test cases sequentially.
  * Stops on first compilation error.
- * @param {string} language
+ * @param {number|string} language
  * @param {string} sourceCode
  * @param {Array<{input: string, output: string}>} testCases
  * @param {number} timeLimitSec
@@ -94,14 +104,11 @@ export async function runTestCases(language, sourceCode, testCases, timeLimitSec
             };
         }
 
-        // Check if output matches expected
         const actualOutput = (result.stdout || "").trim();
         const expectedOutput = (testCase.output || "").trim();
         const isCorrect = statusId === 3 && actualOutput === expectedOutput;
 
-        if (isCorrect) {
-            passed++;
-        }
+        if (isCorrect) passed++;
 
         results.push({
             input: testCase.input,

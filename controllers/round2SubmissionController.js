@@ -5,6 +5,12 @@ import { runTestCases } from "../services/codeExecutionService.js";
 import { calculateScore, syncLeaderboard } from "../services/scoringService.js";
 import { getShipConfig } from "../config/shipConfig.js";
 
+const LANGUAGE_MAP = {
+    50: "C",
+    62: "JAVA",
+    71: "PYTHON"
+};
+
 /**
  * Round 2 submission pipeline.
  *
@@ -18,15 +24,16 @@ import { getShipConfig } from "../config/shipConfig.js";
  */
 export const createSubmission = async (req, res) => {
     try {
-        const { teamId, problemId, language, code } = req.body;
+        const { teamId, problemId, language_id, code } = req.body;
 
-        if (!teamId || !problemId || !language || !code) {
-            return res.status(400).json({ msg: "teamId, problemId, language, and code are required" });
+        if (!teamId || !problemId || !language_id || !code) {
+            return res.status(400).json({ msg: "teamId, problemId, language_id, and code are required" });
         }
 
-        // Validate language
-        if (!["C", "JAVA", "PYTHON"].includes(language.toUpperCase())) {
-            return res.status(400).json({ msg: "Unsupported language. Use C, JAVA, or PYTHON" });
+        // Validate language_id
+        const language = LANGUAGE_MAP[parseInt(language_id)];
+        if (!language) {
+            return res.status(400).json({ msg: "Unsupported language_id. Use 50 (C), 62 (JAVA), or 71 (PYTHON)" });
         }
 
         // Fetch team and problem
@@ -49,17 +56,20 @@ export const createSubmission = async (req, res) => {
             return res.status(400).json({ msg: "Problem already solved" });
         }
 
+        // Activate problem if not started yet
+        if (problemEntry.status === "NOT_STARTED") {
+            problemEntry.status = "ACTIVE";
+            problemEntry.startTime = new Date();
+        }
+
         // Get ship config for life management
         const shipConfig = getShipConfig(team.shipConfig);
         const initialLives = shipConfig ? shipConfig.round2Lives : 3;
 
-        // If SUNK, lives have been reset — allow retry
-        // (lives were reset when it was sunk, so livesLeft should already be > 0)
-
         // Execute code against test cases via Judge0
         const testCases = problem.testCases || [];
         const executionResult = await runTestCases(
-            language.toUpperCase(),
+            language,
             code,
             testCases,
             problem.timeLimitSec || 10
@@ -127,7 +137,7 @@ export const createSubmission = async (req, res) => {
         const submission = new Round2Submission({
             teamId,
             problemId,
-            language: language.toUpperCase(),
+            language,
             code,
             passedTestCases: executionResult.passed || 0,
             totalTestCases: executionResult.total || 0,
