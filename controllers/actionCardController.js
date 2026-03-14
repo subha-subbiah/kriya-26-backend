@@ -70,8 +70,8 @@ export const ACTION_CARDS = {
  * Helper to award a random action card to a team
  */
 export const awardRandomCard = async (team) => {
-    // Constraint: Max 2 action cards claimed
-    if (team.claimedActionCards && team.claimedActionCards.length >= 2) {
+    // Constraint: Max 4 action cards claimed
+    if (team.claimedActionCards && team.claimedActionCards.length >= 4) {
         return null;
     }
 
@@ -104,7 +104,7 @@ export const claimActionCard = async (req, res) => {
         if (!awarded) {
             return res.status(400).json({ 
                 success: false, 
-                msg: "Cannot claim more cards (Limit 2 or all unique cards collected)." 
+                msg: "Cannot claim more cards (Limit 4 or all unique cards collected)." 
             });
         }
 
