@@ -74,8 +74,11 @@ export const verifyOTP = async (req, res) => {
       token,
       team: {
         id: team._id,
+        teamName: team.teamName,
         kriyaID: team.kriyaID,
-        teamName: team.teamName
+        shipConfig: team.shipConfig,
+        currentIsland: team.currentIsland,
+        setNo: team.setNo
       }
     });
   } catch (error) {
